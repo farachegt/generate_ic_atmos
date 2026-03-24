@@ -88,7 +88,7 @@ Esses campos foram escolhidos para casar com o fluxo de `ungrib` usando a `Vtabl
 Exemplo basico:
 
 ```bash
-python generate_ic_atmos/generate_ic_atmos.py \
+python generate_ic_atmos.py \
   --start 2026-03-01_00 \
   --end 2026-03-05_21 \
   --interval-hours 3 \
@@ -100,7 +100,7 @@ python generate_ic_atmos/generate_ic_atmos.py \
 Exemplo reutilizando GRIBs ja baixados:
 
 ```bash
-python generate_ic_atmos/generate_ic_atmos.py \
+python generate_ic_atmos.py \
   --start 2026-03-01_00 \
   --end 2026-03-05_21 \
   --interval-hours 3 \
