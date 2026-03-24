@@ -18,9 +18,11 @@ Este diretório reúne materiais para preparar dados do ERA5 até a geração do
 - [generate_ic_atmos.py](generate_ic_atmos.py)
   Script principal de automação. Executa o fluxo `download ERA5 -> link_grib -> ungrib` e entrega os arquivos finais `ERA5:YYYY-MM-DD_HH` na raiz de `output-dir`.
 
-## Uso rápido
+## Guia rápido
 
 O script baixa os dados do ERA5 para o intervalo especificado por `--start` e `--end`, executa `link_grib.csh`, roda o `ungrib.exe` presentes no diretório do WPS (`--wps-dir`) e entrega os arquivos finais `ERA5:YYYY-MM-DD_HH` na raiz de `output-dir`.
+
+Antes de usar o script, faça os pré-requisitos: configure sua conta do CDS com `~/.cdsapirc`, instale o pacote `cdsapi` e tenha uma instalação funcional do WPS com `link_grib.csh`, `ungrib.exe` e `Vtable.ECMWF`.
 
 Parâmetros obrigatórios de `generate_ic_atmos.py`: `--start`, `--end`, `--output-dir` e `--wps-dir`.
 
