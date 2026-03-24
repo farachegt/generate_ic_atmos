@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Baixa dados do ERA5 e executa o fluxo do WPS ate o ungrib.
+Downloads ERA5 data and runs the WPS workflow through ungrib.
 
-Escopo:
-- download de arquivos GRIB do ERA5 em niveis de pressao e superficie
-- geracao de um namelist.wps minimo para o ungrib
-- preparacao do diretorio de trabalho do WPS
-- execucao do link_grib.csh
-- execucao do ungrib.exe
+Scope:
+- download ERA5 GRIB files for pressure and surface fields
+- generate a minimal namelist.wps for ungrib
+- prepare the WPS working directory
+- run link_grib.csh
+- run ungrib.exe
 
-O script nao executa o init_atmosphere.
+This script does not run init_atmosphere.
 """
 
 from __future__ import annotations
@@ -93,6 +93,7 @@ DATETIME_FORMATS = (
 
 
 def parse_datetime(value: str) -> dt.datetime:
+    """Convert a CLI date string into a datetime object."""
     for fmt in DATETIME_FORMATS:
         try:
             return dt.datetime.strptime(value, fmt)
@@ -105,6 +106,7 @@ def parse_datetime(value: str) -> dt.datetime:
 
 
 def parse_pressure_levels(value: str) -> list[str]:
+    """Convert the pressure-level string into a validated list."""
     levels = [item.strip() for item in value.split(",") if item.strip()]
     if not levels:
         raise argparse.ArgumentTypeError(
@@ -114,6 +116,7 @@ def parse_pressure_levels(value: str) -> list[str]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the ERA5 -> ungrib workflow."""
     parser = argparse.ArgumentParser(
         description=(
             "Executa o fluxo ERA5 -> link_grib -> ungrib em um diretorio "
@@ -182,11 +185,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Prefixo dos arquivos intermediarios gerados pelo ungrib.",
     )
     parser.add_argument(
-        "--grid",
-        default=DEFAULT_GRID,
-        help="Resolucao da grade pedida ao CDS, no formato lat/lon.",
-    )
-    parser.add_argument(
         "--pressure-levels",
         type=parse_pressure_levels,
         default=DEFAULT_PRESSURE_LEVELS,
@@ -202,10 +200,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Sobrescreve os GRIBs existentes durante o download.",
     )
+    parser.add_argument(
+        "--keep-intermediate-files",
+        action="store_true",
+        help="Preserva os diretorios e arquivos intermediarios gerados pelo processo.",
+    )
     return parser
 
 
 def ensure_valid_dates(start: dt.datetime, end: dt.datetime, interval_hours: int) -> None:
+    """Validate temporal consistency between start, end, and interval."""
     if interval_hours <= 0:
         raise ValueError("--interval-hours deve ser maior que zero.")
     if end < start:
@@ -224,6 +228,7 @@ def iter_times(
     end: dt.datetime,
     interval_hours: int,
 ) -> list[dt.datetime]:
+    """Generate the sequence of timestamps to process."""
     times = []
     current = start
     delta = dt.timedelta(hours=interval_hours)
@@ -234,6 +239,7 @@ def iter_times(
 
 
 def grib_paths(download_dir: Path, when: dt.datetime) -> tuple[Path, Path]:
+    """Return the standard pressure and surface GRIB paths."""
     timestamp = when.strftime("%Y%m%d_%H%M")
     pressure_file = download_dir / f"era5_pl_{timestamp}.grib"
     surface_file = download_dir / f"era5_sfc_{timestamp}.grib"
@@ -241,10 +247,12 @@ def grib_paths(download_dir: Path, when: dt.datetime) -> tuple[Path, Path]:
 
 
 def print_step(message: str) -> None:
+    """Print a workflow message using a consistent prefix."""
     print(f"[ERA5/WPS] {message}")
 
 
 def snapshot_existing_paths(root_dir: Path) -> set[Path]:
+    """Capture the contents that already existed in output-dir."""
     if not root_dir.exists():
         return set()
 
@@ -255,6 +263,7 @@ def snapshot_existing_paths(root_dir: Path) -> set[Path]:
 
 
 def ensure_wps_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
+    """Resolve WPS-related paths and ensure they exist."""
     wps_dir = args.wps_dir.expanduser().resolve()
     link_grib = (
         args.link_grib.expanduser().resolve()
@@ -283,6 +292,7 @@ def ensure_wps_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
 
 
 def ensure_cds_client():
+    """Create the CDS client and fail clearly if the dependency is missing."""
     try:
         import cdsapi
     except ImportError as exc:
@@ -300,6 +310,7 @@ def retrieve_dataset(
     target: Path,
     overwrite: bool,
 ) -> None:
+    """Download a CDS dataset or reuse the existing local file."""
     if target.exists() and not overwrite:
         print_step(f"Reutilizando arquivo existente: {target}")
         return
@@ -309,14 +320,12 @@ def retrieve_dataset(
     client.retrieve(dataset, payload, str(target))
 
 
-def build_request_base(
-    when: dt.datetime,
-    grid: str,
-) -> dict[str, object]:
+def build_request_base(when: dt.datetime) -> dict[str, object]:
+    """Build the common fields for an ERA5 request payload."""
     payload: dict[str, object] = {
         "product_type": "reanalysis",
         "format": "grib",
-        "grid": grid,
+        "grid": DEFAULT_GRID,
         "year": f"{when.year:04d}",
         "month": f"{when.month:02d}",
         "day": f"{when.day:02d}",
@@ -328,10 +337,10 @@ def build_request_base(
 def download_era5_files(
     times: list[dt.datetime],
     download_dir: Path,
-    grid: str,
     pressure_levels: list[str],
     overwrite: bool,
 ) -> list[Path]:
+    """Download pressure and surface GRIBs for all requested times."""
     client = ensure_cds_client()
     ordered_files: list[Path] = []
 
@@ -339,7 +348,7 @@ def download_era5_files(
         pressure_file, surface_file = grib_paths(download_dir, when)
         ordered_files.extend([pressure_file, surface_file])
 
-        base_request = build_request_base(when, grid)
+        base_request = build_request_base(when)
         pressure_request = dict(base_request)
         pressure_request["variable"] = PRESSURE_VARIABLES
         pressure_request["pressure_level"] = pressure_levels
@@ -366,6 +375,7 @@ def download_era5_files(
 
 
 def ensure_existing_gribs(times: list[dt.datetime], download_dir: Path) -> list[Path]:
+    """Check whether the required local GRIBs already exist."""
     ordered_files: list[Path] = []
     missing_files: list[Path] = []
 
@@ -392,6 +402,7 @@ def render_namelist_wps(
     interval_hours: int,
     prefix: str,
 ) -> str:
+    """Generate a minimal namelist.wps suitable for ungrib."""
     start_wps = start.strftime("%Y-%m-%d_%H:%M:%S")
     end_wps = end.strftime("%Y-%m-%d_%H:%M:%S")
     interval_seconds = interval_hours * 3600
@@ -438,6 +449,7 @@ def render_namelist_wps(
 
 
 def replace_file_with_symlink_or_copy(source: Path, target: Path) -> None:
+    """Create a symbolic link or fall back to copying the file."""
     if target.exists() or target.is_symlink():
         target.unlink()
 
@@ -448,6 +460,7 @@ def replace_file_with_symlink_or_copy(source: Path, target: Path) -> None:
 
 
 def cleanup_grib_links(workdir: Path) -> None:
+    """Remove stale GRIBFILE links from the WPS working directory."""
     for path in workdir.glob("GRIBFILE.*"):
         if path.is_file() or path.is_symlink():
             path.unlink()
@@ -458,6 +471,7 @@ def prepare_wps_workdir(
     vtable_source: Path,
     namelist_content: str,
 ) -> None:
+    """Prepare the WPS workdir with the namelist and Vtable for ungrib."""
     workdir.mkdir(parents=True, exist_ok=True)
     cleanup_grib_links(workdir)
     (workdir / "namelist.wps").write_text(namelist_content, encoding="utf-8")
@@ -465,6 +479,7 @@ def prepare_wps_workdir(
 
 
 def build_link_grib_command(link_grib: Path, grib_files: list[Path]) -> list[str]:
+    """Build the link_grib.csh command with all GRIB inputs."""
     command = [str(link_grib)]
     if (link_grib.stat().st_mode & 0o111) == 0:
         csh = shutil.which("csh")
@@ -479,6 +494,7 @@ def build_link_grib_command(link_grib: Path, grib_files: list[Path]) -> list[str
 
 
 def run_command(command: list[str], workdir: Path) -> None:
+    """Run an external command in the given working directory."""
     command_as_text = " ".join(command)
     print_step(f"Executando em {workdir}: {command_as_text}")
     subprocess.run(command, cwd=workdir, check=True)
@@ -490,12 +506,14 @@ def run_wps_ungrib(
     ungrib_exe: Path,
     grib_files: list[Path],
 ) -> None:
+    """Run link_grib.csh and ungrib.exe in sequence."""
     link_grib_command = build_link_grib_command(link_grib, grib_files)
     run_command(link_grib_command, workdir)
     run_command([str(ungrib_exe)], workdir)
 
 
 def collect_intermediate_files(workdir: Path, prefix: str) -> list[Path]:
+    """List the final files produced by ungrib in the workdir."""
     return sorted(workdir.glob(f"{prefix}:*"))
 
 
@@ -504,6 +522,7 @@ def ensure_no_output_conflicts(
     existing_relpaths: set[Path],
     final_files: list[Path],
 ) -> None:
+    """Prevent final outputs from overwriting preexisting files in output-dir."""
     for final_file in final_files:
         target = output_dir / final_file.name
         if not target.exists():
@@ -521,6 +540,7 @@ def move_final_files_to_output_dir(
     output_dir: Path,
     final_files: list[Path],
 ) -> list[Path]:
+    """Move ungrib final files into the root of output-dir."""
     output_dir.mkdir(parents=True, exist_ok=True)
     moved_files: list[Path] = []
 
@@ -541,69 +561,123 @@ def move_final_files_to_output_dir(
     return moved_files
 
 
-def add_path_and_parents_to_keep(
-    keep_relpaths: set[Path],
-    output_dir: Path,
+def path_existed_in_output_dir(
     path: Path,
-) -> None:
+    output_dir: Path,
+    existing_relpaths: set[Path],
+) -> bool:
+    """Return whether a path already existed in output-dir before this run."""
     try:
         relpath = path.relative_to(output_dir)
     except ValueError:
-        return
+        return False
 
-    keep_relpaths.add(relpath)
-    for parent in relpath.parents:
-        keep_relpaths.add(parent)
+    return relpath in existing_relpaths
 
 
-def cleanup_output_dir(
+def collect_current_run_cleanup_files(
     output_dir: Path,
     existing_relpaths: set[Path],
-    paths_to_keep: list[Path],
-) -> None:
-    if not output_dir.exists():
-        return
+    wps_workdir: Path,
+    grib_files: list[Path],
+    prefix: str,
+) -> list[Path]:
+    """Collect only the intermediate files created by the current run."""
+    managed_files: list[Path] = [
+        *grib_files,
+        wps_workdir / "namelist.wps",
+        wps_workdir / "Vtable",
+        wps_workdir / "ungrib.log",
+        *wps_workdir.glob("GRIBFILE.*"),
+        *wps_workdir.glob(f"{prefix}:*"),
+    ]
+    cleanup_files: list[Path] = []
+    seen: set[Path] = set()
 
-    keep_relpaths = set(existing_relpaths)
-    keep_relpaths.add(Path("."))
+    for path in managed_files:
+        if path in seen:
+            continue
+        seen.add(path)
 
-    for kept_path in paths_to_keep:
-        add_path_and_parents_to_keep(keep_relpaths, output_dir, kept_path)
+        if not path.exists() and not path.is_symlink():
+            continue
+        if not path.is_relative_to(output_dir):
+            continue
+        if path_existed_in_output_dir(path, output_dir, existing_relpaths):
+            continue
 
-    all_paths = sorted(
-        output_dir.rglob("*"),
+        cleanup_files.append(path)
+
+    return cleanup_files
+
+
+def collect_current_run_cleanup_dirs(
+    output_dir: Path,
+    existing_relpaths: set[Path],
+    *directories: Path,
+) -> list[Path]:
+    """Identify directories created in this run that can be removed."""
+    cleanup_dirs: set[Path] = set()
+
+    for directory in directories:
+        if not directory.exists():
+            continue
+
+        if not directory.is_relative_to(output_dir):
+            continue
+
+        current = directory
+        while current != output_dir:
+            if path_existed_in_output_dir(current, output_dir, existing_relpaths):
+                break
+            cleanup_dirs.add(current)
+            current = current.parent
+
+    return sorted(
+        cleanup_dirs,
         key=lambda path: len(path.relative_to(output_dir).parts),
         reverse=True,
     )
 
-    for path in all_paths:
-        relpath = path.relative_to(output_dir)
-        if relpath in keep_relpaths:
-            continue
 
+def cleanup_current_run_artifacts(
+    output_dir: Path,
+    existing_relpaths: set[Path],
+    download_dir: Path,
+    wps_workdir: Path,
+    grib_files: list[Path],
+    prefix: str,
+) -> None:
+    """Delete only the intermediate artifacts associated with this run."""
+    cleanup_files = collect_current_run_cleanup_files(
+        output_dir=output_dir,
+        existing_relpaths=existing_relpaths,
+        wps_workdir=wps_workdir,
+        grib_files=grib_files,
+        prefix=prefix,
+    )
+    cleanup_dirs = collect_current_run_cleanup_dirs(
+        output_dir,
+        existing_relpaths,
+        download_dir,
+        wps_workdir,
+    )
+
+    for path in cleanup_files:
         if path.is_symlink() or path.is_file():
             path.unlink()
-        elif path.is_dir():
-            try:
-                path.rmdir()
-            except OSError:
-                pass
 
-
-def remove_intermediate_dirs(output_dir: Path, *directories: Path) -> None:
-    for directory in directories:
+    for directory in cleanup_dirs:
+        if not directory.exists():
+            continue
         try:
-            directory.relative_to(output_dir)
-        except ValueError:
-            continue
-
-        if directory == output_dir or not directory.exists():
-            continue
-
-        shutil.rmtree(directory)
+            directory.rmdir()
+        except OSError:
+            pass
 
 
 def main() -> int:
+    """Orchestrate the full workflow from ERA5 download through ungrib."""
     parser = build_parser()
     args = parser.parse_args()
 
@@ -635,7 +709,6 @@ def main() -> int:
         grib_files = download_era5_files(
             times=times,
             download_dir=download_dir,
-            grid=args.grid,
             pressure_levels=args.pressure_levels,
             overwrite=args.overwrite_downloads,
         )
@@ -668,12 +741,20 @@ def main() -> int:
         output_dir=output_dir,
         final_files=intermediate_files,
     )
-    cleanup_output_dir(
-        output_dir=output_dir,
-        existing_relpaths=existing_output_paths,
-        paths_to_keep=final_files,
-    )
-    remove_intermediate_dirs(output_dir, download_dir, wps_workdir)
+    if args.keep_intermediate_files:
+        print_step(
+            "Preservando arquivos intermediarios conforme solicitado por "
+            "--keep-intermediate-files."
+        )
+    else:
+        cleanup_current_run_artifacts(
+            output_dir=output_dir,
+            existing_relpaths=existing_output_paths,
+            download_dir=download_dir,
+            wps_workdir=wps_workdir,
+            grib_files=grib_files,
+            prefix=args.prefix,
+        )
     print_step(
         "Fluxo concluido. "
         f"Arquivos finais do ungrib encontrados: {len(final_files)}"
