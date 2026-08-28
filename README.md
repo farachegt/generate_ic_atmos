@@ -9,8 +9,8 @@ Este diretório reúne materiais para preparar dados do ERA5 até a geração do
 - [generate_ic_atmos.md](docs/generate_ic_atmos.md)
   Guia principal do projeto. Explica o objetivo do fluxo, os pré-requisitos, como rodar a automação e qual é a estrutura final de saída.
 
-- [instalando_wps.md](docs/instalando_wps.md)
-  Guia dedicado à instalação do WPS.
+- [instalar_wps_jaci.md](docs/instalar_wps_jaci.md)
+  Guia dedicado à compilação do WPS 4.7.0 para utilizar o `ungrib.exe` no cluster Jaci.
 
 - [tutorial_wps.md](docs/tutorial_wps.md)
   Tutorial conceitual do WPS. Explica o papel da `Vtable`, do `namelist.wps`, do `link_grib.csh` e do `ungrib.exe`.
@@ -24,6 +24,8 @@ O script baixa os dados do ERA5 para o intervalo especificado por `--start` e `-
 
 Antes de usar o script, faça os pré-requisitos: configure sua conta do CDS com `~/.cdsapirc`, instale o pacote `cdsapi` e tenha uma instalação funcional do WPS com `link_grib.csh`, `ungrib.exe` e `Vtable.ECMWF`.
 
+No cluster Jaci, siga [instalar_wps_jaci.md](docs/instalar_wps_jaci.md) para compilar o WPS somente com o `ungrib.exe` e suporte a GRIB2. As opções de módulos e a correção de `configure.wps` descritas nesse documento são específicas do ambiente do Jaci.
+
 Parâmetros obrigatórios de `generate_ic_atmos.py`: `--start`, `--end`, `--output-dir` e `--wps-dir`.
 
 ```bash
@@ -36,7 +38,7 @@ python generate_ic_atmos.py \
 
 ## Fluxo sugerido
 
-1. Ler [instalando_wps.md](docs/instalando_wps.md) para preparar o ambiente.
+1. No cluster Jaci, ler [instalar_wps_jaci.md](docs/instalar_wps_jaci.md) para preparar o WPS.
 2. Ler [tutorial_wps.md](docs/tutorial_wps.md) para entender o processo manual do WPS.
 3. Usar [generate_ic_atmos.md](docs/generate_ic_atmos.md) como guia operacional do projeto.
 4. Executar [generate_ic_atmos.py](generate_ic_atmos.py) para automatizar o processo.
