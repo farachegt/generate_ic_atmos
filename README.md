@@ -24,7 +24,7 @@ O script baixa os dados do ERA5 para o intervalo especificado por `--start` e `-
 
 Antes de usar o script, faça os pré-requisitos: configure sua conta do CDS com `~/.cdsapirc`, instale o pacote `cdsapi` e tenha uma instalação funcional do WPS com `link_grib.csh`, `ungrib.exe` e `Vtable.ECMWF`.
 
-No cluster Jaci, siga [instalar_wps_jaci.md](docs/instalar_wps_jaci.md) para compilar o WPS somente com o `ungrib.exe` e suporte a GRIB2. As opções de módulos e a correção de `configure.wps` descritas nesse documento são específicas do ambiente do Jaci.
+No cluster Jaci, siga [instalar_wps_jaci.md](docs/instalar_wps_jaci.md) para compilar o WPS somente com o `ungrib.exe` e suporte a GRIB2 usando o ambiente GNU.
 
 Parâmetros obrigatórios de `generate_ic_atmos.py`: `--start`, `--end`, `--output-dir` e `--wps-dir`.
 
